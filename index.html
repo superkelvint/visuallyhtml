@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rich Paste to Clean HTML</title>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
+  <style>
+    :root {
+      --bg: #daa520;
+      --panel: #ffffff;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --line: #d1d5db;
+      --accent: #0f766e;
+      --accent-2: #0d9488;
+      --danger: #b91c1c;
+      --mono: "IBM Plex Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      --sans: "Source Sans 3", "Segoe UI", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      background: var(--bg);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      width: min(1260px, 92vw);
+      margin: 2rem auto;
+      display: grid;
+      gap: 1rem;
+    }
+
+    .title {
+      margin: 0;
+      font-size: clamp(1.4rem, 2.2vw, 2rem);
+      letter-spacing: 0.01em;
+    }
+
+    .sub {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 0.75rem;
+    }
+
+    button {
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 0.55rem 0.85rem;
+      font: inherit;
+      cursor: pointer;
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    button:hover { filter: brightness(0.97); }
+
+    .primary { background: var(--accent); color: #fff; }
+    .primary:hover { background: var(--accent-2); }
+    .danger { background: #fee2e2; color: var(--danger); border-color: #fecaca; }
+
+    .toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+
+    @media (min-width: 900px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 0.9rem;
+      min-height: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 1rem;
+      color: #374151;
+    }
+
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    #editor {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      min-height: 220px;
+      padding: 0.8rem;
+      outline: none;
+      overflow: auto;
+      background: #fff;
+      line-height: 1.45;
+    }
+
+    #editor:focus {
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+    }
+
+    #editor:empty::before {
+      content: "Paste rich text here (Cmd/Ctrl+V)...";
+      color: #9ca3af;
+    }
+
+    #htmlOut {
+      width: 100%;
+      min-height: 220px;
+      max-height: min(46vh, 420px);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.8rem;
+      resize: none;
+      overflow: auto;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      line-height: 1.5;
+      background: #f9fafb;
+      color: #111827;
+    }
+
+    #preview {
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      padding: 0.8rem;
+      min-height: 120px;
+      background: #fff;
+      overflow: auto;
+    }
+
+    .status {
+      min-height: 1.2em;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    code { font-family: var(--mono); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1 class="title">Rich Paste to Clean HTML</h1>
+      <p class="sub">Paste from Google Docs / browsers / editors, keep formatting, and copy cleaned HTML.</p>
+    </header>
+
+    <section class="controls">
+      <button id="copyBtn" class="primary">Copy HTML</button>
+      <button id="downloadBtn">Download .html</button>
+      <button id="clearBtn" class="danger">Clear</button>
+
+      <div class="toggles">
+        <label><input type="checkbox" id="stripStyles" /> Strip inline styles/classes</label>
+        <label><input type="checkbox" id="keepTables" checked /> Keep tables</label>
+        <label><input type="checkbox" id="keepForms" /> Keep form controls</label>
+        <label><input type="checkbox" id="prettyOutput" checked /> Pretty output</label>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>1) Paste Rich Content</h2>
+        <p class="hint">Use a regular paste. This area is <code>contenteditable</code>, so HTML formatting is preserved.</p>
+        <div id="editor" contenteditable="true" aria-label="Rich text editor"></div>
+      </article>
+
+      <article class="panel">
+        <h2>2) Cleaned HTML Output</h2>
+        <p class="hint">This is the sanitized HTML you can paste elsewhere.</p>
+        <textarea id="htmlOut" readonly spellcheck="false"></textarea>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>3) Preview</h2>
+      <div id="preview" aria-live="polite"></div>
+      <p id="status" class="status"></p>
+    </section>
+  </main>
+
+  <script src="./cleaner.js"></script>
+  <script>
+
+    const editor = document.getElementById('editor');
+    const htmlOut = document.getElementById('htmlOut');
+    const preview = document.getElementById('preview');
+    const statusEl = document.getElementById('status');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const stripStyles = document.getElementById('stripStyles');
+    const keepTables = document.getElementById('keepTables');
+    const keepForms = document.getElementById('keepForms');
+    const prettyOutput = document.getElementById('prettyOutput');
+
+    function resizeOutputTextarea() {
+      const minHeight = 220;
+      const maxHeight = Math.min(Math.round(window.innerHeight * 0.46), 420);
+      htmlOut.style.height = 'auto';
+      htmlOut.style.height = `${Math.min(maxHeight, Math.max(minHeight, htmlOut.scrollHeight))}px`;
+    }
+
+    function extractCleanHtml() {
+      const { cleaned, output } = window.HtmlCleaner.cleanHtml(editor.innerHTML, {
+        stripStyles: stripStyles.checked,
+        keepTables: keepTables.checked,
+        keepForms: keepForms.checked,
+        prettyOutput: prettyOutput.checked
+      });
+      htmlOut.value = output;
+      resizeOutputTextarea();
+      preview.innerHTML = cleaned || '<p style="color:#6b7280">Nothing pasted yet.</p>';
+      statusEl.textContent = cleaned
+        ? `Updated ${new Date().toLocaleTimeString()} - ${cleaned.length} characters`
+        : '';
+    }
+
+    editor.addEventListener('input', extractCleanHtml);
+    editor.addEventListener('paste', () => {
+      requestAnimationFrame(extractCleanHtml);
+    });
+
+    [stripStyles, keepTables, keepForms, prettyOutput].forEach((el) => {
+      el.addEventListener('change', extractCleanHtml);
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(htmlOut.value);
+        statusEl.textContent = 'HTML copied to clipboard.';
+      } catch (err) {
+        statusEl.textContent = 'Clipboard copy failed. Select and copy manually.';
+      }
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      const blob = new Blob([htmlOut.value], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'cleaned-content.html';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      statusEl.textContent = 'Downloaded cleaned-content.html';
+    });
+
+    clearBtn.addEventListener('click', () => {
+      editor.innerHTML = '';
+      htmlOut.value = '';
+      resizeOutputTextarea();
+      preview.innerHTML = '<p style="color:#6b7280">Nothing pasted yet.</p>';
+      statusEl.textContent = 'Cleared.';
+      editor.focus();
+    });
+
+    window.addEventListener('resize', resizeOutputTextarea);
+    preview.innerHTML = '<p style="color:#6b7280">Nothing pasted yet.</p>';
+    resizeOutputTextarea();
+  </script>
+</body>
+</html>
